@@ -7,6 +7,13 @@
   font-family: "Muli", sans-serif;
 }
 
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden; /* CỰC KỲ QUAN TRỌNG: Cấm trình duyệt cuộn */
+}
+
 $backgroundColor: #282b34;
 $redColor: #ff1e56;
 $yellowColor: #ffac41;
