@@ -75,7 +75,7 @@
         word-wrap: break-word;
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
       }
-      
+
       span {
         font-size: 0.8rem;
         color: #888;
@@ -161,3 +161,27 @@
     }
   }
 }
+
+/* Class này sẽ ghi đè style của nút button ở trên */
+    .btn-attach-file {
+      padding: 0;           /* Reset padding */
+      margin-right: 5px;
+      width: 40px;
+      height: 40px;
+      min-width: 40px;      /* Cố định chiều ngang */
+      border-radius: 50%;   /* Hình tròn */
+      background-color: #333 !important; /* Dùng !important để chắc chắn ăn màu xám */
+      color: #ccc !important;            /* Icon màu sáng */
+      
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease-in-out;
+
+      /* Khi di chuột vào nút đính kèm */
+      &:hover {
+        background-color: #444 !important;
+        color: #4ade80 !important; /* Icon chuyển xanh */
+        transform: scale(1.1);
+      }
+    }

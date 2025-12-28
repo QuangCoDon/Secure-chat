@@ -9,13 +9,14 @@ const formatForDisplay = (obj) => {
 };
 
 function Chat({ username, roomname, socket }) {
-  const [text, setText] = useState("");
+  const [text, setText] = useState('');
   const [messages, setMessages] = useState([]);
-  const [roomUsers, setRoomUsers] = useState([]); 
+  const [roomUsers, setRoomUsers] = useState([]);
   const dispatch = useDispatch();
   
   // REF ĐỂ CUỘN
   const chatContainerRef = useRef(null);
+  const fileInputRef = useRef(null); // Ref cho input file ẩn
 
   const dispatchProcess = useCallback((encrypt, msg, cipher) => {
     dispatch(process(encrypt, msg, cipher));
@@ -28,57 +29,74 @@ function Chat({ username, roomname, socket }) {
     }
   };
 
+  // --- HÀM 1: Parse JSON để kiểm tra File ---
+  const parseContent = (content) => {
+    try {
+      const parsed = JSON.parse(content);
+      if (parsed && parsed.type === 'file' && parsed.data) {
+        return parsed;
+      }
+      return content;
+    } catch (e) {
+      return content; 
+    }
+  };
+
+  // --- HÀM 2: Lắng nghe Socket ---
   useEffect(() => {
-    // 1. Cập nhật danh sách người online
-    socket.on("roomUsers", ({ users }) => {
-        const others = users.filter(u => u !== username);
-        setRoomUsers(others);
+    socket.on('roomUsers', ({ users }) => {
+      const others = users.filter((u) => u !== username);
+      setRoomUsers(others);
     });
 
-    // 2. Xử lý tin nhắn đến
-    socket.on("message", async (data) => {
-      // Tin nhắn hệ thống (Welcome, User joined...)
-      if (data.username === "System") {
-         setMessages((prev) => [...prev, data]);
-         return;
+    socket.on('message', async (data) => {
+      // Tin nhắn hệ thống
+      if (data.username === 'System') {
+        setMessages((prev) => [...prev, { ...data, isFile: false }]);
+        return;
       }
-
-      // Bỏ qua tin nhắn do chính mình gửi (đã render ở hàm sendData rồi)
-      if (data.username === username) return; 
+      // Bỏ qua tin nhắn của chính mình
+      if (data.username === username) return;
 
       const sender = data.username;
 
-      // Hàm helper để hiển thị tin nhắn thành công
+      // Helper xử lý thành công
       const handleSuccess = (decryptedText) => {
-          dispatchProcess(false, decryptedText, formatForDisplay(data.content));
-          setMessages((prev) => [...prev, {
-            userId: data.userId, username: sender, text: decryptedText,
-          }]);
+        dispatchProcess(false, decryptedText, formatForDisplay(data.content));
+
+        const parsedContent = parseContent(decryptedText);
+
+        setMessages((prev) => [
+          ...prev,
+          {
+            userId: data.userId,
+            username: data.username,
+            text: decryptedText, // Text gốc (json string nếu là file)
+            content: parsedContent, // Object file hoặc string text
+            isFile: typeof parsedContent === 'object', // Cờ đánh dấu
+          },
+        ]);
       };
 
       try {
-        // THỬ LẦN 1: Giải mã bình thường
+        // THỬ LẦN 1
         const decryptedAns = await cryptoService.decrypt(sender, data.content);
         if (decryptedAns) handleSuccess(decryptedAns);
 
       } catch (err) {
         console.warn(`⚠️ Giải mã thất bại từ ${sender}. Đang thử tải lại Key...`);
         
-        // THỬ LẦN 2: Tự động tải lại Key và thử giải mã lại
+        // THỬ LẦN 2 (Retry logic)
         try {
-             // 1. Gọi API lấy Key mới nhất của người gửi
              const response = await fetch(`http://localhost:8000/api/certificate/${sender}`);
              
              if (response.ok) {
                  const cert = await response.json();
                  console.log(`🔑 Đã tải Key mới của ${sender}`);
                  
-                 // 2. Cập nhật Key vào bộ nhớ
                  await cryptoService.establishConnection(sender, cert);
                  
-                 // 3. Thử giải mã lại
                  const retryAns = await cryptoService.decrypt(sender, data.content);
-                 
                  if (retryAns) {
                      console.log("✅ Khôi phục tin nhắn thành công!");
                      handleSuccess(retryAns);
@@ -88,69 +106,140 @@ function Chat({ username, roomname, socket }) {
              }
         } catch (retryErr) { 
             console.error("❌ Lỗi giải mã hoàn toàn:", retryErr);
-            // Có thể hiện tin nhắn lỗi lên giao diện nếu muốn
-            // setMessages(prev => [...prev, { username: sender, text: "🔒 [Lỗi giải mã: Tin nhắn không đọc được]" }]);
         }
       }
     });
 
     return () => {
-        socket.off("message");
-        socket.off("roomUsers");
+      socket.off('message');
+      socket.off('roomUsers');
     };
-  }, [socket, username, dispatchProcess]); // Thêm dispatch vào deps
+  }, [socket, username, dispatchProcess]);
 
-  // Cuộn xuống mỗi khi có tin nhắn mới
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
 
-  const sendData = async () => {
-    if (text !== "") {
-      // Hiển thị tin mình gửi ngay lập tức
-      setMessages((prev) => [...prev, { userId: "me", username: username, text: text }]);
-      const msgToSend = text;
-      setText("");
+  // --- HÀM 3: GỬI DỮ LIỆU (Đã sửa lỗi copy-paste) ---
+  const sendEncryptedPayload = async (rawContent, displayForMe) => {
+    // 1. Hiển thị lên màn hình mình trước
+    setMessages((prev) => [
+      ...prev,
+      {
+        userId: 'me',
+        username: username,
+        content: displayForMe, // Object file hoặc text
+        text: typeof displayForMe === 'object' ? JSON.stringify(displayForMe) : displayForMe,
+        isFile: typeof displayForMe === 'object',
+      },
+    ]);
 
-      // Gửi cho từng người trong phòng
-      for (const recipient of roomUsers) {
-          try {
-              // 1. Luôn tải Key mới nhất trước khi gửi (Proactive Key Update)
-              // Điều này giúp ngăn chặn lỗi xảy ra ngay từ đầu
-              // console.log(`Fetching fresh key for ${recipient}...`);
-              const res = await fetch(`http://localhost:8000/api/certificate/${recipient}`);
-              
-              if (res.ok) {
-                  const cert = await res.json();
-                  await cryptoService.establishConnection(recipient, cert);
-              } else {
-                  console.warn(`User ${recipient} offline hoặc không có Key.`);
-                  continue; 
-              }
+    // Chuỗi cần mã hóa
+    const contentToEncrypt = typeof rawContent === 'object' ? JSON.stringify(rawContent) : rawContent;
 
-              // 2. Mã hóa và Gửi
-              const encryptedPackage = await cryptoService.encrypt(recipient, msgToSend);
-              
-              // Gói tin gửi đi cần chứa username người gửi để bên kia biết ai gửi mà decrypt
-              // Backend có thể tự gắn username, nhưng frontend gửi kèm để chắc chắn
-              // const packetToSend = {
-              //     username: username, // Người gửi
-              //     content: encryptedPackage,
-              //     to: recipient
-              // };
-              
-              socket.emit("chat", encryptedPackage); // Backend của bạn đang nhận gói tin này và broadcast
-
-              // Log ra process
-              dispatchProcess(true, msgToSend, JSON.stringify(encryptedPackage, null, 2));
-
-          } catch (err) {
-              console.error(`Gửi lỗi tới ${recipient}:`, err.message);
+    // 2. Gửi cho từng người nhận
+    for (const recipient of roomUsers) {
+      try {
+        // Bước A: Đảm bảo có Key mới nhất
+        try {
+          const res = await fetch(`http://localhost:8000/api/certificate/${recipient}`);
+          if (res.ok) {
+            const cert = await res.json();
+            await cryptoService.establishConnection(recipient, cert);
           }
+        } catch (e) {
+             console.warn(`Không thể fetch key của ${recipient}, dùng key cache cũ.`);
+        }
+
+        // Bước B: Mã hóa
+        const encryptedPackage = await cryptoService.encrypt(recipient, contentToEncrypt);
+
+        // Bước C: Gửi qua socket
+        socket.emit('chat', encryptedPackage);
+
+        // Bước D: Log vào process
+        dispatchProcess(true, contentToEncrypt, JSON.stringify(encryptedPackage, null, 2));
+
+      } catch (err) {
+        console.error(`Gửi lỗi tới ${recipient}:`, err.message);
       }
     }
   };
 
+  // --- HÀM 4: Xử lý gửi Text ---
+  const sendText = async () => {
+    if (text !== '') {
+      await sendEncryptedPayload(text, text);
+      setText('');
+    }
+  };
+
+  // --- HÀM 5: Xử lý gửi File ---
+  const handleSelectFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    if (file.size > 5 * 1024 * 1024) {
+      alert('File quá lớn! Vui lòng gửi file dưới 5MB.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = async () => {
+      const base64Data = reader.result;
+
+      const filePayload = {
+        type: 'file',
+        name: file.name,
+        mime: file.type,
+        data: base64Data,
+      };
+
+      await sendEncryptedPayload(filePayload, filePayload);
+      e.target.value = null; // Reset input
+    };
+  };
+
+  // --- HÀM 6: Render nội dung tin nhắn (Ảnh/File/Text) ---
+  const renderMessageContent = (msg) => {
+    // Nếu là file
+    if (msg.isFile && msg.content && msg.content.type === 'file') {
+      const { mime, data, name } = msg.content;
+
+      // Ảnh
+      if (mime.startsWith('image/')) {
+        return (
+          <div>
+            <img
+              src={data}
+              alt={name}
+              style={{ maxWidth: '200px', maxHeight: '200px', borderRadius: '8px', cursor: 'pointer', display: 'block' }}
+              onClick={() => {
+                const w = window.open('');
+                w.document.write(`<img src="${data}" style="width:100%"/>`);
+              }}
+            />
+          </div>
+        );
+      }
+
+      // File tải xuống
+      return (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', background: 'rgba(0,0,0,0.2)', padding: '8px 12px', borderRadius: '6px' }}>
+          <span style={{ fontSize: '1.2rem' }}>📎</span>
+          <a href={data} download={name} style={{ color: '#4ade80', textDecoration: 'underline' }}>
+            {name}
+          </a>
+        </div>
+      );
+    }
+    
+    // Nếu là text thường
+    return <p>{msg.content || msg.text}</p>;
+  };
+
+  // --- RENDER GIAO DIỆN ---
   return (
     <div className="chat">
       <div className="user-name">
@@ -169,7 +258,6 @@ function Chat({ username, roomname, socket }) {
 
       <div className="chat-message" ref={chatContainerRef}>
         {messages.map((i, index) => {
-            // Logic hiển thị tin nhắn hệ thống
             if (i.username === "System") {
                 return (
                     <div key={index} style={{textAlign: "center", margin: "10px 0", color: "#666", fontSize: "0.8rem"}}>
@@ -179,21 +267,46 @@ function Chat({ username, roomname, socket }) {
             }
             return (
               <div key={index} className={`message ${i.username === username ? "mess-right" : ""}`}>
-                <p>{i.text}</p>
+                {/* SỬA LỖI: Dùng hàm renderMessageContent thay vì thẻ p */}
+                {renderMessageContent(i)}
                 <span>{i.username === username ? "Me" : i.username}</span>
               </div>
             );
         })}
       </div>
-      
+
       <div className="send">
+        {/* Input file ẩn */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          style={{ display: 'none' }}
+          onChange={handleSelectFile}
+        />
+        
+        {/* Nút kẹp giấy */}
+        <button
+          onClick={() => fileInputRef.current.click()}
+          className="btn-attach-file"
+          title="Attach File"
+          style={{ padding: '0 15px', background: '#333' }}
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
+            <path d="M0 0h24v24H0V0z" fill="none" />
+            <path
+              d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"
+              fill="#ffffff"
+            />
+          </svg>
+        </button>
+
         <input
           placeholder="Type a message..."
           value={text}
           onChange={(e) => setText(e.target.value)}
-          onKeyPress={(e) => e.key === "Enter" && sendData()}
+          onKeyPress={(e) => e.key === 'Enter' && sendText()}
         ></input>
-        <button onClick={sendData}>SEND</button>
+        <button onClick={sendText}>SEND</button>
       </div>
     </div>
   );
