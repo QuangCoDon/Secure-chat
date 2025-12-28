@@ -4,7 +4,6 @@ import {
   genRandomSalt,
   generateEG,
   computeDH,
-  verifyWithECDSA,
   HMACtoAESKey,
   HMACtoHMACKey,
   HKDF,

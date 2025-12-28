@@ -5,15 +5,15 @@ const subtle = window.crypto.subtle;
 
 // --- ĐÂY LÀ CHÌA KHÓA VẠN NĂNG (CỐ ĐỊNH) ---
 // Bắt buộc cả Alice và Bob phải dùng đúng chuỗi JSON này
-const HARDCODED_GOV_KEY = {
-    kty: "EC",
-    crv: "P-384",
-    x: "Fp6K8s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z", 
-    y: "Fp6K8s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z", 
-    // Lưu ý: Đây là key dummy. Trong thực tế cần tọa độ x,y hợp lệ của P-384.
-    // Nếu import bị lỗi, ta sẽ dùng giải pháp B (Generate 1 lần rồi lưu LocalStorage).
-    ext: true,
-};
+// const HARDCODED_GOV_KEY = {
+//     kty: "EC",
+//     crv: "P-384",
+//     x: "Fp6K8s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z", 
+//     y: "Fp6K8s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z6s0z", 
+//     // Lưu ý: Đây là key dummy. Trong thực tế cần tọa độ x,y hợp lệ của P-384.
+//     // Nếu import bị lỗi, ta sẽ dùng giải pháp B (Generate 1 lần rồi lưu LocalStorage).
+//     ext: true,
+// };
 
 class CryptoService {
   constructor() {
@@ -54,12 +54,41 @@ class CryptoService {
     }
   }
 
-  async init(username, password) {
+  async init(username, password, providedSalt = null) {
     this.username = username;
-    
+    // let existingSalt = null;
+    // try {
+    //     // Nhớ thay port 8000 cho đúng backend của bạn
+    //     const res = await fetch(`http://localhost:8000/api/salt/${username}`);
+    //     if (res.ok) {
+    //         const data = await res.json();
+    //         if (data.salt) {
+    //             console.log("Tìm thấy Salt cũ:", data.salt);
+    //             existingSalt = data.salt;
+    //         }
+    //     }
+    // } catch (e) {
+    //     console.warn("Không kết nối được server để lấy Salt, sẽ tạo mới (Cảnh báo: mất dữ liệu cũ)");
+    // }
     // 1. Két sắt
-    this.keychain = await Keychain.init(password);
+    this.keychain = await Keychain.init(password, providedSalt);
 
+    // 3. NẾU LÀ SALT MỚI TẠO -> GỬI LÊN SERVER LƯU NGAY
+    if (!providedSalt) {
+        console.log("Tạo Salt mới, đang lưu lên server...");
+        try {
+            await fetch("http://localhost:8000/api/salt", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    username: username,
+                    salt: this.keychain.data.salt
+                })
+            });
+        } catch (e) {
+            console.error("Lỗi lưu Salt:", e);
+        }
+    }
     // 2. Khóa Chính phủ
     const govPubKey = await this.getStaticGovKey(); 
 

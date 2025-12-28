@@ -1,7 +1,7 @@
 import "./chat.scss";
 import { cryptoService } from "../crypto-core/CryptoService";
 import { process } from "../store/action/index";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useDispatch } from "react-redux";
 
 const formatForDisplay = (obj) => {
@@ -14,56 +14,82 @@ function Chat({ username, roomname, socket }) {
   const [roomUsers, setRoomUsers] = useState([]); 
   const dispatch = useDispatch();
   
-  // REF ĐỂ CUỘN: Trỏ vào container chứa tin nhắn
+  // REF ĐỂ CUỘN
   const chatContainerRef = useRef(null);
 
-  const dispatchProcess = (encrypt, msg, cipher) => {
+  const dispatchProcess = useCallback((encrypt, msg, cipher) => {
     dispatch(process(encrypt, msg, cipher));
-  };
+  }, [dispatch]);
 
-  // --- HÀM CUỘN MỚI (MƯỢT HƠN) ---
   const scrollToBottom = () => {
     if (chatContainerRef.current) {
       const { scrollHeight, clientHeight } = chatContainerRef.current;
-      // Đặt vị trí cuộn xuống đáy
       chatContainerRef.current.scrollTop = scrollHeight - clientHeight;
     }
   };
 
   useEffect(() => {
+    // 1. Cập nhật danh sách người online
     socket.on("roomUsers", ({ users }) => {
         const others = users.filter(u => u !== username);
         setRoomUsers(others);
     });
 
+    // 2. Xử lý tin nhắn đến
     socket.on("message", async (data) => {
+      // Tin nhắn hệ thống (Welcome, User joined...)
       if (data.username === "System") {
          setMessages((prev) => [...prev, data]);
          return;
       }
+
+      // Bỏ qua tin nhắn do chính mình gửi (đã render ở hàm sendData rồi)
       if (data.username === username) return; 
 
+      const sender = data.username;
+
+      // Hàm helper để hiển thị tin nhắn thành công
       const handleSuccess = (decryptedText) => {
           dispatchProcess(false, decryptedText, formatForDisplay(data.content));
           setMessages((prev) => [...prev, {
-            userId: data.userId, username: data.username, text: decryptedText,
+            userId: data.userId, username: sender, text: decryptedText,
           }]);
       };
 
       try {
-        const decryptedAns = await cryptoService.decrypt(data.username, data.content);
-        handleSuccess(decryptedAns);
+        // THỬ LẦN 1: Giải mã bình thường
+        const decryptedAns = await cryptoService.decrypt(sender, data.content);
+        if (decryptedAns) handleSuccess(decryptedAns);
+
       } catch (err) {
-        if (err.message.includes("Certificate") && err.message.includes("not found")) {
-            try {
-                const response = await fetch(`http://localhost:5000/api/certificate/${data.username}`);
-                if (response.ok) {
-                    const cert = await response.json();
-                    await cryptoService.establishConnection(data.username, cert);
-                    const retryAns = await cryptoService.decrypt(data.username, data.content);
-                    handleSuccess(retryAns);
-                }
-            } catch (fetchErr) { console.error("Key Error:", fetchErr); }
+        console.warn(`⚠️ Giải mã thất bại từ ${sender}. Đang thử tải lại Key...`);
+        
+        // THỬ LẦN 2: Tự động tải lại Key và thử giải mã lại
+        try {
+             // 1. Gọi API lấy Key mới nhất của người gửi
+             const response = await fetch(`http://localhost:8000/api/certificate/${sender}`);
+             
+             if (response.ok) {
+                 const cert = await response.json();
+                 console.log(`🔑 Đã tải Key mới của ${sender}`);
+                 
+                 // 2. Cập nhật Key vào bộ nhớ
+                 await cryptoService.establishConnection(sender, cert);
+                 
+                 // 3. Thử giải mã lại
+                 const retryAns = await cryptoService.decrypt(sender, data.content);
+                 
+                 if (retryAns) {
+                     console.log("✅ Khôi phục tin nhắn thành công!");
+                     handleSuccess(retryAns);
+                 }
+             } else {
+                 console.error(`Không thể tải Key của ${sender}`);
+             }
+        } catch (retryErr) { 
+            console.error("❌ Lỗi giải mã hoàn toàn:", retryErr);
+            // Có thể hiện tin nhắn lỗi lên giao diện nếu muốn
+            // setMessages(prev => [...prev, { username: sender, text: "🔒 [Lỗi giải mã: Tin nhắn không đọc được]" }]);
         }
       }
     });
@@ -72,7 +98,7 @@ function Chat({ username, roomname, socket }) {
         socket.off("message");
         socket.off("roomUsers");
     };
-  }, [socket, username]);
+  }, [socket, username, dispatchProcess]); // Thêm dispatch vào deps
 
   // Cuộn xuống mỗi khi có tin nhắn mới
   useEffect(() => {
@@ -81,29 +107,45 @@ function Chat({ username, roomname, socket }) {
 
   const sendData = async () => {
     if (text !== "") {
+      // Hiển thị tin mình gửi ngay lập tức
       setMessages((prev) => [...prev, { userId: "me", username: username, text: text }]);
       const msgToSend = text;
       setText("");
 
-      if (roomUsers.length === 0) {
-          // alert("Phòng trống..."); // Có thể bỏ alert nếu thấy phiền
-      }
-
+      // Gửi cho từng người trong phòng
       for (const recipient of roomUsers) {
           try {
-              try {
-                  const res = await fetch(`http://localhost:5000/api/certificate/${recipient}`);
-                  if (res.ok) {
-                      const cert = await res.json();
-                      await cryptoService.establishConnection(recipient, cert);
-                  }
-              } catch (e) {}
+              // 1. Luôn tải Key mới nhất trước khi gửi (Proactive Key Update)
+              // Điều này giúp ngăn chặn lỗi xảy ra ngay từ đầu
+              // console.log(`Fetching fresh key for ${recipient}...`);
+              const res = await fetch(`http://localhost:8000/api/certificate/${recipient}`);
+              
+              if (res.ok) {
+                  const cert = await res.json();
+                  await cryptoService.establishConnection(recipient, cert);
+              } else {
+                  console.warn(`User ${recipient} offline hoặc không có Key.`);
+                  continue; 
+              }
 
+              // 2. Mã hóa và Gửi
               const encryptedPackage = await cryptoService.encrypt(recipient, msgToSend);
-              socket.emit("chat", encryptedPackage);
+              
+              // Gói tin gửi đi cần chứa username người gửi để bên kia biết ai gửi mà decrypt
+              // Backend có thể tự gắn username, nhưng frontend gửi kèm để chắc chắn
+              // const packetToSend = {
+              //     username: username, // Người gửi
+              //     content: encryptedPackage,
+              //     to: recipient
+              // };
+              
+              socket.emit("chat", encryptedPackage); // Backend của bạn đang nhận gói tin này và broadcast
+
+              // Log ra process
               dispatchProcess(true, msgToSend, JSON.stringify(encryptedPackage, null, 2));
+
           } catch (err) {
-              console.error(`Send Error to ${recipient}:`, err.message);
+              console.error(`Gửi lỗi tới ${recipient}:`, err.message);
           }
       }
     }
@@ -112,24 +154,36 @@ function Chat({ username, roomname, socket }) {
   return (
     <div className="chat">
       <div className="user-name">
-        <h2>{username} <span style={{ fontSize: "0.8rem", color: "#888" }}>in {roomname}</span></h2>
+        <div className="room-info">
+            <h2>{username}</h2> 
+            <div>in <span style={{color: "#ccc"}}>{roomname}</span></div>
+        </div>
         <div>
            {roomUsers.length > 0 ? (
-               <span style={{color: "#4ade80"}}>● Online: {roomUsers.join(", ")}</span>
+               <span style={{color: "#4ade80", fontSize: "0.9rem"}}>● Online: {roomUsers.join(", ")}</span>
            ) : (
-               <span style={{color: "#aaa"}}>○ Waiting for others...</span>
+               <span style={{color: "#aaa", fontSize: "0.9rem"}}>○ Waiting for others...</span>
            )}
         </div>
       </div>
 
-      {/* GẮN REF VÀO ĐÂY ĐỂ CUỘN */}
       <div className="chat-message" ref={chatContainerRef}>
-        {messages.map((i, index) => (
-          <div key={index} className={`message ${i.username === username ? "mess-right" : ""}`}>
-            <p>{i.text}</p>
-            <span>{i.username}</span>
-          </div>
-        ))}
+        {messages.map((i, index) => {
+            // Logic hiển thị tin nhắn hệ thống
+            if (i.username === "System") {
+                return (
+                    <div key={index} style={{textAlign: "center", margin: "10px 0", color: "#666", fontSize: "0.8rem"}}>
+                        {i.text}
+                    </div>
+                );
+            }
+            return (
+              <div key={index} className={`message ${i.username === username ? "mess-right" : ""}`}>
+                <p>{i.text}</p>
+                <span>{i.username === username ? "Me" : i.username}</span>
+              </div>
+            );
+        })}
       </div>
       
       <div className="send">
@@ -144,4 +198,5 @@ function Chat({ username, roomname, socket }) {
     </div>
   );
 }
+
 export default Chat;

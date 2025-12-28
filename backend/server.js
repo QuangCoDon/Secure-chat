@@ -38,6 +38,61 @@ app.post("/api/register", async (req, res) => {
     res.status(500).json({ msg: "Error registering user" });
   }
 });
+// --- API ĐĂNG KÝ (Tạo mới) ---
+app.post("/api/auth/register", async (req, res) => {
+  try {
+    const { username, password, room, salt, certificate } = req.body;
+    
+    // Kiểm tra user tồn tại chưa
+    const existingUser = await User.findOne({ username });
+    if (existingUser) return res.status(400).json("Username đã tồn tại!");
+
+    // Tạo user mới
+    const newUser = new User({
+      username,
+      password, // Lưu ý: Thực tế nên dùng bcrypt để hash password này
+      room,
+      salt,
+      certificate,
+      encryptedVault: "",
+      vaultIntegrity: ""
+    });
+
+    await newUser.save();
+    res.status(200).json("Đăng ký thành công!");
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
+
+// --- API ĐĂNG NHẬP (Kiểm tra & Lấy Salt) ---
+app.post("/api/auth/login", async (req, res) => {
+  try {
+    const { username, password, room } = req.body;
+
+    // 1. Tìm user
+    const user = await User.findOne({ username });
+    if (!user) return res.status(404).json("User không tồn tại!");
+
+    // 2. Check Password đăng nhập
+    if (user.password !== password) {
+        return res.status(401).json("Sai mật khẩu đăng nhập!");
+    }
+
+    // 3. Check Room (Bắt buộc đúng room mới cho vào)
+    if (user.room !== room) {
+        return res.status(403).json(`User này thuộc phòng '${user.room}', không phải '${room}'!`);
+    }
+
+    // 4. Trả về Salt để Client tái tạo Master Key
+    res.status(200).json({ 
+        salt: user.salt,
+        message: "Login OK"
+    });
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
 
 // API: Lấy Certificate của người khác (Để bắt đầu chat Project 2)
 app.get("/api/certificate/:username", async (req, res) => {
@@ -55,16 +110,33 @@ app.post("/api/vault", async (req, res) => {
   try {
     const { username, encryptedVault, vaultIntegrity } = req.body;
     
+    console.log("------------------------------------------------");
+    console.log(`[DEBUG] Nhận yêu cầu lưu Vault cho user: ${username}`);
+    console.log(`[DEBUG] Dữ liệu mã hóa nhận được:`, encryptedVault ? "Có dữ liệu" : "RỖNG!!!");
+
     // Tìm và update
-    await User.findOneAndUpdate(
-      { username: username },
+    const updatedUser = await User.findOneAndUpdate(
+      { username: username }, 
       { 
-        encryptedVault: encryptedVault,
-        vaultIntegrity: vaultIntegrity
-      }
+        $set: { 
+            encryptedVault: encryptedVault,
+            vaultIntegrity: vaultIntegrity
+        }
+      },
+      { new: true }
     );
+
+    if (!updatedUser) {
+        console.error(`[LỖI] Không tìm thấy user "${username}" trong Database để update!`);
+        return res.status(404).json("User not found");
+    }
+
+    console.log(`[THÀNH CÔNG] Đã update DB cho user: ${updatedUser.username}`);
+    console.log("------------------------------------------------");
+    
     res.status(200).json("Vault synced successfully");
   } catch (err) {
+    console.error("[LỖI SERVER]", err);
     res.status(500).json(err);
   }
 });
@@ -83,6 +155,32 @@ app.get("/api/vault/:username", async (req, res) => {
   }
 });
 
+// API Lấy Salt (Gọi khi bắt đầu đăng nhập)
+app.get("/api/salt/:username", async (req, res) => {
+  try {
+    const user = await User.findOne({ username: req.params.username });
+    if (!user) return res.status(404).json("User not found");
+    // Trả về salt (nếu chưa có thì trả về rỗng)
+    res.status(200).json({ salt: user.salt || "" });
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
+
+// API Lưu Salt (Gọi lần đầu tiên tạo tài khoản hoặc lần đầu dùng Vault)
+app.post("/api/salt", async (req, res) => {
+  try {
+    const { username, salt } = req.body;
+    await User.findOneAndUpdate(
+      { username: username },
+      { $set: { salt: salt } }
+    );
+    res.status(200).json("Salt saved");
+  } catch (err) {
+    res.status(500).json(err);
+  }
+});
+
 // --- 3. KHỞI CHẠY SERVER ---
 var server = app.listen(
   port,
@@ -97,7 +195,6 @@ const io = socket(server, {
   },
 });
 
-// Thay thế dummyuser.js bằng một Map trong bộ nhớ để quản lý user online
 // Key: socket.id, Value: { username, room }
 let onlineUsers = new Map();
 function getRoomUsers(room) {

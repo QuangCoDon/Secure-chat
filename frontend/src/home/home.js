@@ -1,95 +1,84 @@
 import React, { useState } from "react";
-import "./home.scss";
-// 1. Thay Link bằng useHistory (để chuyển trang sau khi code chạy xong)
-import { useHistory } from "react-router-dom"; 
+import { useHistory, Link } from "react-router-dom";
 import { cryptoService } from "../crypto-core/CryptoService";
+import "./home.scss";
 
 function Home({ socket }) {
-  const [username, setusername] = useState("");
-  const [roomname, setroomname] = useState("");
-  const [password, setPassword] = useState(""); 
+  const [username, setUsername] = useState("");
+  const [room, setRoom] = useState("");
+  const [password, setPassword] = useState("");     // Pass Login
+  const [masterPass, setMasterPass] = useState(""); // Pass Crypto
   const [loading, setLoading] = useState(false);
   
-  // 2. Khai báo history
-  const history = useHistory(); 
+  const history = useHistory();
 
-  const sendData = async () => {
-    if (username !== "" && roomname !== "" && password !== "") {
-      setLoading(true);
-      try {
-        console.log("Initializing Security Layer...");
+  const handleLogin = async () => {
+    if (!username || !password || !masterPass || !room) {
+        return alert("Điền đủ thông tin!");
+    }
+
+    setLoading(true);
+    try {
+        // 1. Gọi API Login để xác thực & lấy Salt
+        const res = await fetch("http://localhost:8000/api/auth/login", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ username, password, room })
+        });
+
+        if (!res.ok) {
+            const err = await res.json();
+            throw new Error(err);
+        }
+
+        const data = await res.json();
+        const serverSalt = data.salt; // Salt chuẩn từ server
+
+        console.log("✅ Login Server OK. Salt:", serverSalt);
+
+        // 2. Khởi tạo Crypto với Salt lấy từ Server
+        // init sẽ tạo lại đúng bộ khóa cũ nhờ salt này
+        const myNewCert = await cryptoService.init(username, masterPass, serverSalt);
         
-        // 3. KHỞI TẠO HỆ THỐNG MẬT MÃ
-        // Tạo Két sắt (Project 1) và Identity Key (Project 2)
-        const myCert = await cryptoService.init(username, password);
-        console.log("Crypto Ready! Identity:", myCert);
-        
-        // 4. GỬI PUBLIC KEY LÊN SERVER (Quan trọng cho Project 2)
-        // Bước này giúp người khác tìm thấy bạn để chat mã hóa
-        await fetch("http://localhost:5000/api/register", {
+        // Kiểm tra xem Salt tạo ra có khớp không (logic trong Keychain.init đã xử lý)
+        // Nếu Master Password sai -> Key sai -> Sau này giải mã sẽ lỗi (DOMException)
+        console.log("🔄 Đang cập nhật Certificate mới lên Server...");
+        await fetch("http://localhost:8000/api/register", { // Tái sử dụng API register để update
              method: "POST",
              headers: {"Content-Type": "application/json"},
              body: JSON.stringify({ 
                  username, 
-                 certificate: myCert,
-                 encryptedVault: "", // Gửi két sắt rỗng ban đầu
-                 vaultIntegrity: "" 
+                 certificate: myNewCert
+                 // KHÔNG gửi encryptedVault để tránh ghi đè dữ liệu cũ
              })
         });
+        // 3. Join Socket
+        socket.emit("joinRoom", { username, roomname: room });
 
-        // 5. Sau khi xong hết mới Join phòng
-        socket.emit("joinRoom", { username, roomname });
-        
-        setLoading(false);
+        // 4. Vào Chat
+        history.push(`/chat/${username}/${room}`);
 
-        // 6. CHUYỂN TRANG BẰNG CODE
-        // Thay thế cho việc dùng thẻ <Link>
-        history.push(`/chat/${username}/${roomname}`);
-        
-      } catch (err) {
-        alert("Lỗi khởi tạo bảo mật: " + err.message);
-        setLoading(false);
-      }
-    } else {
-      alert("Vui lòng nhập đầy đủ Username, Room và Password!");
+    } catch (err) {
+        alert("Đăng nhập thất bại: " + err.message);
+        setLoading(false); 
     }
   };
 
   return (
     <div className="homepage">
-      <h1>
-        SecureChat <span style={{fontSize: "1rem", color: "lime"}}>E2EE</span>
-      </h1>
+      <h1>SecureChat Login</h1>
       
-      <input
-        placeholder="Username"
-        value={username}
-        onChange={(e) => setusername(e.target.value)}
-      ></input>
-      
-      <input
-        placeholder="Room Name"
-        value={roomname}
-        onChange={(e) => setroomname(e.target.value)}
-      ></input>
+      <input placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} />
+      <input placeholder="Room Name" value={room} onChange={e => setRoom(e.target.value)} />
+      <input type="password" placeholder="Login Password" 
+        value={password} onChange={e => setPassword(e.target.value)} />
+      <input type="password" placeholder="Master Password" 
+        value={masterPass} onChange={e => setMasterPass(e.target.value)} />
 
-      {/* Ô nhập Master Password */}
-      <input
-        type="password"
-        placeholder="Master Password (cho Vault & Keys)"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-        style={{border: "2px solid #4ade80"}}
-      ></input>
 
-      {/* Nút Join: Bỏ thẻ Link, chỉ dùng Button với onClick */}
-      <button onClick={sendData} disabled={loading}>
-          {loading ? "Initializing Keys..." : "Secure Join"}
-      </button>
+      <button onClick={handleLogin} disabled={loading}>{loading ? "Verifying..." : "Login"}</button>
       
-      <p style={{marginTop: "10px", fontSize: "0.8rem", color: "#aaa"}}>
-        *Master Password được dùng để sinh khóa PBKDF2 (Project 1)
-      </p>
+      <p>Chưa có tài khoản? <Link to="/register" style={{color: "#4ade80"}}>Đăng ký</Link></p>
     </div>
   );
 }
