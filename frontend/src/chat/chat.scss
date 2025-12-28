@@ -1,125 +1,162 @@
-//some styling to chat.js
-// https://www.npmjs.com/package/node-sass
-
+/* frontend/src/chat/chat.scss */
 @import "../globals";
-@mixin scrollbars(
-  $size,
-  $foreground-color,
-  $background-color: mix($foreground-color, white, 50%)
-) {
-  //style for Google Chrome
-  &::-webkit-scrollbar {
-    width: $size;
-    height: $size;
-  }
 
-  &::-webkit-scrollbar-thumb {
-    background: $foreground-color;
-    border-radius: 10px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: $background-color;
-    border-radius: 10px;
-  }
-
-  //style for Internet Explorer
-  & {
-    scrollbar-face-color: $foreground-color;
-    scrollbar-track-color: $background-color;
-  }
+/* Mixin thanh cuộn đẹp cho Desktop */
+@mixin scrollbars($size, $foreground-color, $background-color: mix($foreground-color, white, 50%)) {
+  &::-webkit-scrollbar { width: $size; height: $size; }
+  &::-webkit-scrollbar-thumb { background: $foreground-color; border-radius: 4px; }
+  &::-webkit-scrollbar-track { background: $background-color; border-radius: 4px; }
 }
+
 .chat {
-  width: 400px;
-  height: 600px;
-  background-color: $greyColor;
-  padding: 1rem;
+  width: 100%;
+  height: 100%;
+  background-color: #252526;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  overflow: hidden;
+  box-sizing: border-box;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
+  /* 1. HEADER: Rộng rãi, thoáng mắt */
   .user-name {
-    text-align: start;
-    width: 100%;
-    h2 {
-      font-weight: 300;
-      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-      padding-bottom: 1rem;
+    flex-shrink: 0;
+    padding: 15px 60px; /* Padding lớn hơn cho Desktop */
+    background-color: #1e1e1e;
+    border-bottom: 1px solid #333;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+    
+    .room-info {
+        h2 {
+          margin: 0;
+          color: #4ade80;
+          font-size: 1.5rem; /* Font to rõ */
+          font-weight: 600;
+        }
+        div { 
+            margin-top: 5px; 
+            font-size: 0.95rem; 
+            color: #ccc; 
+        }
     }
   }
+
+  /* 2. KHU VỰC TIN NHẮN */
   .chat-message {
-    height: 70%;
+    flex: 1; 
+    width: 100%; /* Trải hết bề ngang khu vực nội dung */
     overflow-y: auto;
-    @include scrollbars(5px, $backgroundColor, $yellowColor);
+    padding: 20px 40px; /* Lề hai bên cho cảm giác thoáng trên Desktop */
     display: flex;
-    flex-direction: column;
-    width: 100%;
-    align-content: flex-start;
+    flex-direction: column; 
+    gap: 12px;
+    
+    @include scrollbars(8px, #555, #252526);
 
+    /* --- TIN NHẮN NGƯỜI KHÁC (Căn TRÁI) --- */
     .message {
-      margin-left: 0px;
-      max-width: 220px;
-      padding-left: 0.5rem;
-
-      p {
-        font-size: 1rem;
-        background-color: #250202;
-        padding: 1rem;
-        border-radius: 0px 10px 10px 10px;
-        font-weight: 300;
-        color: #b4b6be;
-      }
-
-      span {
-        font-size: 0.6rem;
-        font-weight: 200;
-        color: #b4b6be;
-        padding-left: 0.5rem;
-      }
-    }
-    .mess-right {
-      margin-left: auto;
-      margin-right: 0px;
       display: flex;
       flex-direction: column;
-      max-width: 220px;
-      padding-right: 0.5rem;
+      align-self: flex-start; /* <--- QUAN TRỌNG: Đẩy sang TRÁI */
+      max-width: 90%;         /* Mở rộng bề ngang cho cảm giác rộng hơn trên Desktop */
+      min-width: 120px;       /* Đảm bảo tin ngắn không bị quá bé */
+      
       p {
-        text-align: end;
-        border-radius: 10px 0px 10px 10px;
-        background-color: $redColor;
-        color: white;
+        background-color: #333; 
+        color: #e0e0e0;
+        padding: 12px 18px;
+        border-radius: 8px;   /* Bo góc nhẹ, vuông vức hơn mobile */
+        margin: 0;
+        font-size: 1rem;
+        line-height: 1.5;
+        word-wrap: break-word;
+        box-shadow: 0 1px 2px rgba(0,0,0,0.1);
       }
+      
       span {
-        width: 100%;
-        text-align: end;
-        padding-left: 0rem;
-        padding-right: 0.5rem;
+        font-size: 0.8rem;
+        color: #888;
+        margin-top: 5px;
+        margin-left: 5px;
+      }
+    }
+
+    /* --- TIN NHẮN CỦA MÌNH (Căn PHẢI) --- */
+    .message.mess-right {
+      align-self: flex-end;   /* <--- QUAN TRỌNG: Đẩy sang PHẢI */
+      align-items: flex-end;  /* Căn tên người gửi sang phải */
+
+      p {
+        background-color: #4ade80; 
+        color: #111;
+        font-weight: 500;
+        text-align: left; /* Nội dung văn bản vẫn căn trái để dễ đọc */
+      }
+
+      span {
+        text-align: right;
+        margin-right: 5px;
       }
     }
   }
 
+  /* Tối ưu cho màn hình Desktop rộng */
+  @media (min-width: 1024px) {
+    .chat-message {
+      padding: 24px 60px; /* Tăng padding hai bên một chút cho Desktop */
+      gap: 14px;
+    }
+    .chat-message .message {
+      max-width: 88%; /* Vẫn rộng nhưng cân đối để dễ đọc */
+    }
+  }
+
+  /* 3. KHU VỰC NHẬP LIỆU: Phong cách Desktop */
   .send {
-    width: 100%;
-    height: 50px;
+    flex-shrink: 0;
+    padding: 20px 30px;
+    background-color: #1e1e1e;
+    border-top: 1px solid #333;
     display: flex;
+    gap: 15px;
+    align-items: center;
+
     input {
-      width: 80%;
-      text-decoration: none;
-      background-color: #404450;
-      border: none;
-      padding-left: 1rem;
-      border-radius: 5px 0px 0px 5px;
+      flex: 1;
+      padding: 14px 20px; /* Ô nhập cao hơn */
+      border-radius: 6px;
+      border: 1px solid #444;
+      background-color: #2d2d2d;
+      color: white;
+      outline: none;
+      font-size: 1rem;
+      transition: all 0.2s;
+
       &:focus {
-        outline: none;
+        border-color: #4ade80;
+        background-color: #333;
+        box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.1);
       }
     }
+
     button {
-      width: 20%;
+      padding: 0 35px; /* Nút bấm rộng hơn */
+      height: 48px;    /* Chiều cao bằng ô input */
+      background-color: #4ade80;
+      color: #000;
       border: none;
-      background-color: $yellowColor;
-      border-radius: 0px 5px 5px 0px;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 0.95rem;
+      letter-spacing: 0.5px;
+      transition: background 0.2s;
+      
       &:hover {
-        cursor: pointer;
+        background-color: #22c55e;
       }
     }
   }
