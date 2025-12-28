@@ -9,8 +9,10 @@ const mongoose = require("mongoose");
 // Import Model User vừa tạo
 const User = require("./models/User");
 
-// Middleware quan trọng để đọc JSON từ body request
-app.use(express.json());
+// --- THAY ĐỔI 1: Tăng giới hạn body parser ---
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
+
 app.use(cors());
 
 const port = process.env.PORT || 8000;
@@ -21,13 +23,11 @@ mongoose
   .then(() => console.log("--> DB Connection Successful".green))
   .catch((err) => console.log("--> DB Connection Error: ".red, err));
 
-// --- 2. CÁC API REST (Phục vụ Project 1 & 2) ---
+// --- 2. CÁC API REST ---
 
-// API: Đăng ký User mới & Lưu Key ban đầu
 app.post("/api/register", async (req, res) => {
   const { username, certificate, encryptedVault, vaultIntegrity } = req.body;
   try {
-    // Tìm user, nếu chưa có thì tạo mới, có rồi thì update (upsert)
     await User.findOneAndUpdate(
       { username },
       { certificate, encryptedVault, vaultIntegrity },
@@ -39,7 +39,6 @@ app.post("/api/register", async (req, res) => {
   }
 });
 
-// API: Lấy Certificate của người khác (Để bắt đầu chat Project 2)
 app.get("/api/certificate/:username", async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
@@ -50,12 +49,9 @@ app.get("/api/certificate/:username", async (req, res) => {
   }
 });
 
-// API: Lưu lại Két sắt (Project 1)
 app.post("/api/vault", async (req, res) => {
   try {
     const { username, encryptedVault, vaultIntegrity } = req.body;
-    
-    // Tìm và update
     await User.findOneAndUpdate(
       { username: username },
       { 
@@ -69,7 +65,6 @@ app.post("/api/vault", async (req, res) => {
   }
 });
 
-// API: Tải Két sắt về (Project 1)
 app.get("/api/vault/:username", async (req, res) => {
   try {
     const user = await User.findOne({ username: req.params.username });
@@ -90,15 +85,15 @@ var server = app.listen(
 );
 
 // --- 4. SOCKET.IO (XỬ LÝ CHAT REALTIME) ---
+// --- THAY ĐỔI 2: Thêm maxHttpBufferSize ---
 const io = socket(server, {
+  maxHttpBufferSize: 1e8, // Cho phép gói tin lên tới 100MB
   cors: {
     origin: "*",
     methods: ["GET", "POST"],
   },
 });
 
-// Thay thế dummyuser.js bằng một Map trong bộ nhớ để quản lý user online
-// Key: socket.id, Value: { username, room }
 let onlineUsers = new Map();
 function getRoomUsers(room) {
   const users = [];
@@ -109,16 +104,15 @@ function getRoomUsers(room) {
   }
   return users;
 }
+
 io.on("connection", (socket) => {
   socket.on("joinRoom", ({ username, roomname }) => {
     onlineUsers.set(socket.id, { username, room: roomname });
     socket.join(roomname);
 
-    // Gửi tin nhắn chào mừng (Giữ nguyên)
     socket.emit("message", { userId: "admin", username: "System", text: `Welcome ${username}` });
     socket.broadcast.to(roomname).emit("message", { userId: "admin", username: "System", text: `${username} joined` });
 
-    // --- MỚI: Gửi danh sách user trong phòng cho TẤT CẢ mọi người ---
     const usersInRoom = getRoomUsers(roomname);
     io.to(roomname).emit("roomUsers", {
       room: roomname,
@@ -132,29 +126,23 @@ io.on("connection", (socket) => {
     });
   });
 
-  // Khi user gửi tin nhắn (QUAN TRỌNG: Xử lý gói tin mã hóa)
   socket.on("chat", (payload) => {
-    // payload bây giờ là Object { header: {...}, ciphertext: "..." }
     const user = onlineUsers.get(socket.id);
-
     if (user) {
-      // Server chỉ chuyển tiếp (forward), không đọc được nội dung
       io.to(user.room).emit("message", {
         userId: socket.id,
         username: user.username,
-        content: payload, // Gửi nguyên object mã hóa về cho Client
+        content: payload, 
       });
     }
   });
 
-  // Khi user thoát
   socket.on("disconnect", () => {
     const user = onlineUsers.get(socket.id);
     if (user) {
       io.to(user.room).emit("message", { userId: "admin", username: "System", text: `${user.username} left` });
       onlineUsers.delete(socket.id);
 
-      // --- MỚI: Cập nhật lại danh sách user cho người ở lại ---
       const usersInRoom = getRoomUsers(user.room);
       io.to(user.room).emit("roomUsers", {
         room: user.room,

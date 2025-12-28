@@ -1,10 +1,19 @@
-@import "../globals";
+@import '../globals';
 
 /* Mixin thanh cuộn custom */
 @mixin scrollbars($size, $foreground-color, $background-color: mix($foreground-color, white, 50%)) {
-  &::-webkit-scrollbar { width: $size; height: $size; }
-  &::-webkit-scrollbar-thumb { background: $foreground-color; border-radius: 10px; }
-  &::-webkit-scrollbar-track { background: $background-color; border-radius: 10px; }
+  &::-webkit-scrollbar {
+    width: $size;
+    height: $size;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: $foreground-color;
+    border-radius: 10px;
+  }
+  &::-webkit-scrollbar-track {
+    background: $background-color;
+    border-radius: 10px;
+  }
 }
 
 .chat {
@@ -23,13 +32,17 @@
     padding: 15px 20px;
     background-color: #1e1e1e;
     border-bottom: 1px solid #333;
-    
+
     h2 {
       margin: 0;
       color: #4ade80;
       font-size: 1.2rem;
     }
-    div { margin-top: 5px; font-size: 0.85rem; color: #aaa; }
+    div {
+      margin-top: 5px;
+      font-size: 0.85rem;
+      color: #aaa;
+    }
   }
 
   /* 2. Khu vực chứa tin nhắn */
@@ -40,16 +53,16 @@
     display: flex;
     flex-direction: column; /* Xếp dọc từ trên xuống */
     gap: 15px; /* Khoảng cách giữa các tin nhắn */
-    
+
     @include scrollbars(6px, #555, #252526);
 
     /* --- BASE STYLE CHO MỌI TIN NHẮN (Mặc định là bên trái) --- */
     .message {
       display: flex;
       flex-direction: column;
-      max-width: 70%;       /* Chiều rộng tối đa 70% màn hình */
+      max-width: 70%; /* Chiều rộng tối đa 70% màn hình */
       align-self: flex-start; /* <--- QUAN TRỌNG: Căn sang TRÁI */
-      
+
       p {
         background-color: #333; /* Màu xám cho tin người khác */
         color: #e0e0e0;
@@ -60,7 +73,7 @@
         line-height: 1.4;
         word-wrap: break-word; /* Xuống dòng nếu chữ quá dài */
       }
-      
+
       span {
         font-size: 0.75rem;
         color: #888;
@@ -72,14 +85,14 @@
     /* --- STYLE GHI ĐÈ CHO TIN NHẮN CỦA MÌNH (Bên phải) --- */
     /* Lưu ý: Trong React class là "message mess-right" nên dùng & dính liền */
     .message.mess-right {
-      align-self: flex-end;   /* <--- QUAN TRỌNG: Căn sang PHẢI */
-      align-items: flex-end;  /* Căn lề tên người gửi sang phải */
+      align-self: flex-end; /* <--- QUAN TRỌNG: Căn sang PHẢI */
+      align-items: flex-end; /* Căn lề tên người gửi sang phải */
 
       p {
         background-color: #4ade80; /* Màu xanh Hacker */
-        color: #000;               /* Chữ đen */
+        color: #000; /* Chữ đen */
         border-radius: 18px 18px 2px 18px; /* Vuông góc dưới phải */
-        text-align: left;          /* Nội dung tin nhắn vẫn căn trái cho dễ đọc */
+        text-align: left; /* Nội dung tin nhắn vẫn căn trái cho dễ đọc */
       }
 
       span {
@@ -124,10 +137,34 @@
       cursor: pointer;
       text-transform: uppercase;
       font-size: 0.9rem;
-      
+
       &:hover {
         background-color: #22c55e;
       }
     }
   }
 }
+
+/* Class này sẽ ghi đè style của nút button ở trên */
+    .btn-attach-file {
+      padding: 0;           /* Reset padding */
+      margin-right: 5px;
+      width: 40px;
+      height: 40px;
+      min-width: 40px;      /* Cố định chiều ngang */
+      border-radius: 50%;   /* Hình tròn */
+      background-color: #333 !important; /* Dùng !important để chắc chắn ăn màu xám */
+      color: #ccc !important;            /* Icon màu sáng */
+      
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.2s ease-in-out;
+
+      /* Khi di chuột vào nút đính kèm */
+      &:hover {
+        background-color: #444 !important;
+        color: #4ade80 !important; /* Icon chuyển xanh */
+        transform: scale(1.1);
+      }
+    }
