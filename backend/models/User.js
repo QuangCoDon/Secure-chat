@@ -7,6 +7,8 @@ const UserSchema = new mongoose.Schema({
     required: true,
     unique: true,
   },
+  password: { type: String, required: true }, // Mật khẩu đăng nhập (nên hash, nhưng demo lưu text cũng được)
+  room: { type: String, required: true },     // User thuộc phòng nào
   // --- DÀNH CHO PROJECT 1 (PASSWORD MANAGER) ---
   // Lưu chuỗi JSON đã mã hóa của Két sắt
   encryptedVault: {
@@ -24,6 +26,10 @@ const UserSchema = new mongoose.Schema({
     type: Object, 
     default: {},
   },
+  salt: { 
+    type: String,
+    default: "",
+  }
 });
 
 module.exports = mongoose.model("User", UserSchema);

@@ -1,16 +1,13 @@
 import { stringToBuffer, bufferToString, encodeBuffer, decodeBuffer, getRandomBytes } from "./lib";
 const subtle = window.crypto.subtle;
+
 /********* Constants ********/
 const PBKDF2_ITERATIONS = 100000;
-// Tạo sự chậm trễ đối với việc dò mật khẩu brute-force
-const VERIFIER_STRING = "keychain-verification-ok"; // Dùng để kiểm tra mật khẩu đúng
+const VERIFIER_STRING = "keychain-verification-ok";
 
 /********* Helper Functions ********/
 // Hàm dẫn xuất khoá (Key Derivation)
-// MEK: Master Encryption Key
-// Biến mật khẩu người dùng thành một khoá bí mật
 async function _deriveMEK(password, salt_b64) {
-  // Mật khẩu được đưa vào dưới định dạng mà Web Crypto API yêu cầu
   const pwKey = await subtle.importKey(
     "raw",
     stringToBuffer(password),
@@ -18,7 +15,6 @@ async function _deriveMEK(password, salt_b64) {
     false,
     ["deriveKey"]
   );
-  // Trả về một khoá AES-GCM 256-bit được dẫn xuất từ mật khẩu
   return subtle.deriveKey(
     {
       name: "PBKDF2",
@@ -32,35 +28,41 @@ async function _deriveMEK(password, salt_b64) {
     ["encrypt", "decrypt"]
   );
 }
-// Băm dữ liệu theo SHA-256 và trả về chuỗi Base64
+
+// Băm dữ liệu
 async function _hash(data) {
   const hashBuffer = await subtle.digest("SHA-256", stringToBuffer(data));
-  return encodeBuffer(hashBuffer); // Trả về Base64 hash string
+  return encodeBuffer(hashBuffer);
 }
 
 /********* Implementation ********/
 class Keychain {
   
-  /**
-   * Chú ý: Constructor này chỉ nên được gọi bởi .init() và .load()
-   */
   constructor(salt, keychainID, verifier, MEK, kvs = {}) {
     this.data = {
       salt: salt,         
       keychainID: keychainID, 
-      verifier: verifier, // {iv: b64, ct: b64} - Dùng để check mật khẩu
-      kvs: kvs            // { hash(domain): { iv: b64, ct: b64 }, ... }
+      verifier: verifier,
+      kvs: kvs            
     };
     this.secrets = {
       MEK: MEK            
     };
   };
 
-  /** * Creates an empty keychain with the given password.
-    */
-  static async init(password) {
-    const saltBuffer = getRandomBytes(16);
-    const salt_b64 = encodeBuffer(saltBuffer);
+  /** * Tạo Keychain mới
+   */
+  static async init(password, existingSalt = null) {
+    let salt_b64;
+
+    if (existingSalt) {
+        // TRƯỜNG HỢP 1: Đăng nhập lại -> Dùng Salt cũ tải từ Server
+        salt_b64 = existingSalt;
+    } else {
+        // TRƯỜNG HỢP 2: Lần đầu tiên -> Tạo Salt mới
+        const saltBuffer = getRandomBytes(16);
+        salt_b64 = encodeBuffer(saltBuffer);
+    }
 
     const keychainIDBuffer = getRandomBytes(16);
     const keychainID_b64 = encodeBuffer(keychainIDBuffer);
@@ -78,14 +80,90 @@ class Keychain {
       iv: encodeBuffer(verifier_iv),
       ct: encodeBuffer(verifier_ct_buf)
     };
-
-    return new Keychain(salt_b64, keychainID_b64, verifier, MEK, {});
+    const newKeychain = new Keychain(salt_b64, keychainID_b64, verifier, MEK, {});
+    
+    // Đánh dấu là mới tạo để CryptoService biết đường gửi Salt lên Server
+    newKeychain.isNewSalt = !existingSalt; 
+    
+    return newKeychain;
   }
 
-  /**
-    * Loads the keychain state from the provided representation (repr).
-    */
-  static async load(password, repr, trustedDataCheck) {
+  // --- [UPDATE 1] HÀM DUMP (Dùng để LƯU) ---
+  // Sửa để nhận đầu vào là List Password và trả về Object {encryptedVault, vaultIntegrity}
+  async dump(dataList) {
+    try {
+        // 1. Chuyển List thành JSON string
+        // Nếu không có dataList (gọi mặc định), ta lấy kvs nội bộ (logic cũ)
+        const contentToEncrypt = dataList ? JSON.stringify(dataList) : JSON.stringify(this.data);
+        
+        // 2. Tạo IV ngẫu nhiên
+        const iv = getRandomBytes(12);
+
+        // 3. Mã hóa toàn bộ danh sách
+        const ciphertext = await subtle.encrypt(
+            { name: "AES-GCM", iv: iv },
+            this.secrets.MEK,
+            stringToBuffer(contentToEncrypt)
+        );
+
+        // 4. Ghép IV + Ciphertext
+        const combined = new Uint8Array(iv.length + ciphertext.byteLength);
+        combined.set(iv);
+        combined.set(new Uint8Array(ciphertext), iv.length);
+
+        // 5. Encode sang Base64
+        const encryptedVault = encodeBuffer(combined);
+
+        // 6. Tính Integrity (Checksum)
+        const vaultIntegrity = await _hash(encryptedVault);
+
+        // 7. Trả về đúng định dạng UI cần
+        return { encryptedVault, vaultIntegrity };
+
+    } catch (e) {
+        console.error("Dump Error:", e);
+        return { encryptedVault: "", vaultIntegrity: "" };
+    }
+  };
+
+  // --- [UPDATE 2] HÀM LOAD (Dùng để TẢI) ---
+  // Đây là Instance Method (khác với Static load ở dưới)
+  // Dùng để UI gọi: keychain.load(enc, int)
+  async load(encryptedVault, vaultIntegrity) {
+    try {
+        if (!encryptedVault) return [];
+
+        // 1. Kiểm tra toàn vẹn dữ liệu
+        const computedHash = await _hash(encryptedVault);
+        if (computedHash !== vaultIntegrity) {
+            throw new Error("Integrity check failed: Data mismatch.");
+        }
+
+        // 2. Decode Base64
+        const combined = decodeBuffer(encryptedVault);
+
+        // 3. Tách IV (12 byte đầu) và Ciphertext
+        const iv = combined.slice(0, 12);
+        const ciphertext = combined.slice(12);
+
+        // 4. Giải mã
+        const decryptedBuffer = await subtle.decrypt(
+            { name: "AES-GCM", iv: iv },
+            this.secrets.MEK,
+            ciphertext
+        );
+
+        // 5. Parse JSON về danh sách
+        return JSON.parse(bufferToString(decryptedBuffer));
+
+    } catch (e) {
+        console.error("Load Error:", e);
+        return []; // Trả về mảng rỗng nếu lỗi
+    }
+  }
+
+  // --- Logic cũ (Giữ lại để tham khảo hoặc dùng cho Verifier) ---
+  static async deserialize(password, repr, trustedDataCheck) {
     // 1. Rollback Attack Defense
     if (trustedDataCheck) {
       const computedCheck = await _hash(repr);
@@ -131,23 +209,6 @@ class Keychain {
 
     // 5. Create and return the new keychain instance
     return new Keychain(parsedData.salt, parsedData.keychainID, parsedData.verifier, MEK, parsedData.kvs);
-  };
-
-  /**
-    * Returns a JSON serialization.
-    */ 
-  async dump() {
-    const repr = JSON.stringify(this.data);
-    const checksum = await _hash(repr);
-    return [repr, checksum];
-  };
-
-  /**
-   * Helper function to generate AAD
-   */
-  _getAAD(name) {
-    // AAD vẫn dùng tên miền (name) dạng rõ để chống swap attack
-    return stringToBuffer(this.data.keychainID + name);
   }
 
   /**

@@ -13,13 +13,14 @@ function PasswordVault({ username }) {
   // 1. Load và Giải mã dữ liệu khi mở Tab này
   useEffect(() => {
     loadVault();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadVault = async () => {
     setLoading(true);
     try {
       // Gọi API lấy chuỗi mã hóa
-      const res = await fetch(`http://localhost:5000/api/vault/${username}`);
+      const res = await fetch(`http://localhost:8000/api/vault/${username}`);
       const data = await res.json();
 
       if (data.encryptedVault) {
@@ -30,6 +31,9 @@ function PasswordVault({ username }) {
             data.encryptedVault, 
             data.vaultIntegrity
         );
+        if (decryptedList.length === 0 && data.encryptedVault.length > 0) {
+             alert("Cảnh báo: Không thể giải mã Két sắt! Có thể bạn đã nhập sai Master Password hoặc dữ liệu cũ bị lỗi.");
+        }
         setPasswords(decryptedList); // List này là JSON gốc (plaintext)
       }
     } catch (err) {
@@ -42,12 +46,11 @@ function PasswordVault({ username }) {
   // 2. Lưu và Mã hóa dữ liệu
   const saveVault = async (newList) => {
     try {
-      // --- QUAN TRỌNG: Dùng Keychain để mã hóa ---
       // Hàm dump() sẽ trả về { encryptedVault, vaultIntegrity }
       const { encryptedVault, vaultIntegrity } = await cryptoService.keychain.dump(newList);
 
       // Gửi lên Server
-      await fetch("http://localhost:5000/api/vault", {
+      await fetch("http://localhost:8000/api/vault", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
