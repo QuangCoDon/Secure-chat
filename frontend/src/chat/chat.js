@@ -284,20 +284,29 @@ function Chat({ username, roomname, socket }) {
           onChange={handleSelectFile}
         />
         
-        {/* Nút kẹp giấy */}
         <button
           onClick={() => fileInputRef.current.click()}
           className="btn-attach-file"
           title="Attach File"
-          style={{ padding: '0 15px', background: '#333' }}
+          // Thêm style này để đảm bảo icon luôn nằm giữa nút
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 0, // Reset padding nếu có
+          }}
         >
+          {/* --- BẮT ĐẦU MÃ SVG TRỰC TIẾP --- */}
           <svg xmlns="http://www.w3.org/2000/svg" height="24" viewBox="0 0 24 24" width="24">
+            {/* Lớp nền trong suốt */}
             <path d="M0 0h24v24H0V0z" fill="none" />
+            {/* Lớp vẽ icon - ĐƯỢC TÔ MÀU TRẮNG CỨNG Ở ĐÂY */}
             <path
               d="M16.5 6v11.5c0 2.21-1.79 4-4 4s-4-1.79-4-4V5a2.5 2.5 0 0 1 5 0v10.5c0 .55-.45 1-1 1s-1-.45-1-1V6H10v9.5a2.5 2.5 0 0 0 5 0V5c0-2.21-1.79-4-4-4S7 2.79 7 5v12.5c0 3.04 2.46 5.5 5.5 5.5s5.5-2.46 5.5-5.5V6h-1.5z"
               fill="#ffffff"
             />
           </svg>
+          {/* --- KẾT THÚC MÃ SVG --- */}
         </button>
 
         <input
