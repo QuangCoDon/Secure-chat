@@ -18,7 +18,11 @@ function Chat({ username, roomname, socket }) {
 
   const dispatch = useDispatch();
   
-  // REF ĐỂ CUỘN
+  // STATE QUẢN LÝ ẢNH & ZOOM
+  const [viewImage, setViewImage] = useState(null); 
+  const [scale, setScale] = useState(1);            
+
+  const dispatch = useDispatch();
   const chatContainerRef = useRef(null);
   const fileInputRef = useRef(null); 
 
@@ -63,7 +67,6 @@ function Chat({ username, roomname, socket }) {
       const handleSuccess = (decryptedText) => {
         dispatchProcess(false, decryptedText, formatForDisplay(data.content));
         const parsedContent = parseContent(decryptedText);
-
         setMessages((prev) => [
           ...prev,
           {
@@ -79,7 +82,6 @@ function Chat({ username, roomname, socket }) {
       try {
         const decryptedAns = await cryptoService.decrypt(sender, data.content);
         if (decryptedAns) handleSuccess(decryptedAns);
-
       } catch (err) {
         console.warn(`⚠️ Giải mã thất bại từ ${sender}. Đang thử tải lại Key...`);
         try {
@@ -170,6 +172,7 @@ function Chat({ username, roomname, socket }) {
         return (
           <div style={{ marginTop: '5px', marginBottom: '5px' }}>
             <img
+              className="chat-thumbnail"
               src={data}
               alt={name}
               style={{ 
