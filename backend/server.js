@@ -42,7 +42,7 @@ app.post("/api/register", async (req, res) => {
 app.post("/api/auth/register", async (req, res) => {
   try {
     const { username, password, room, salt, certificate } = req.body;
-    
+
     // Kiểm tra user tồn tại chưa
     const existingUser = await User.findOne({ username });
     if (existingUser) return res.status(400).json("Username đã tồn tại!");
@@ -55,7 +55,7 @@ app.post("/api/auth/register", async (req, res) => {
       salt,
       certificate,
       encryptedVault: "",
-      vaultIntegrity: ""
+      vaultIntegrity: "",
     });
 
     await newUser.save();
@@ -76,18 +76,20 @@ app.post("/api/auth/login", async (req, res) => {
 
     // 2. Check Password đăng nhập
     if (user.password !== password) {
-        return res.status(401).json("Sai mật khẩu đăng nhập!");
+      return res.status(401).json("Sai mật khẩu đăng nhập!");
     }
 
     // 3. Check Room (Bắt buộc đúng room mới cho vào)
     if (user.room !== room) {
-        return res.status(403).json(`User này thuộc phòng '${user.room}', không phải '${room}'!`);
+      return res
+        .status(403)
+        .json(`User này thuộc phòng '${user.room}', không phải '${room}'!`);
     }
 
     // 4. Trả về Salt để Client tái tạo Master Key
-    res.status(200).json({ 
-        salt: user.salt,
-        message: "Login OK"
+    res.status(200).json({
+      salt: user.salt,
+      message: "Login OK",
     });
   } catch (err) {
     res.status(500).json(err);
@@ -107,31 +109,36 @@ app.get("/api/certificate/:username", async (req, res) => {
 app.post("/api/vault", async (req, res) => {
   try {
     const { username, encryptedVault, vaultIntegrity } = req.body;
-    
+
     console.log("------------------------------------------------");
     console.log(`[DEBUG] Nhận yêu cầu lưu Vault cho user: ${username}`);
-    console.log(`[DEBUG] Dữ liệu mã hóa nhận được:`, encryptedVault ? "Có dữ liệu" : "RỖNG!!!");
+    console.log(
+      `[DEBUG] Dữ liệu mã hóa nhận được:`,
+      encryptedVault ? "Có dữ liệu" : "RỖNG!!!"
+    );
 
     // Tìm và update
     const updatedUser = await User.findOneAndUpdate(
-      { username: username }, 
-      { 
-        $set: { 
-            encryptedVault: encryptedVault,
-            vaultIntegrity: vaultIntegrity
-        }
+      { username: username },
+      {
+        $set: {
+          encryptedVault: encryptedVault,
+          vaultIntegrity: vaultIntegrity,
+        },
       },
       { new: true }
     );
 
     if (!updatedUser) {
-        console.error(`[LỖI] Không tìm thấy user "${username}" trong Database để update!`);
-        return res.status(404).json("User not found");
+      console.error(
+        `[LỖI] Không tìm thấy user "${username}" trong Database để update!`
+      );
+      return res.status(404).json("User not found");
     }
 
     console.log(`[THÀNH CÔNG] Đã update DB cho user: ${updatedUser.username}`);
     console.log("------------------------------------------------");
-    
+
     res.status(200).json("Vault synced successfully");
   } catch (err) {
     console.error("[LỖI SERVER]", err);
@@ -179,10 +186,35 @@ app.post("/api/salt", async (req, res) => {
 });
 
 // --- 3. KHỞI CHẠY SERVER ---
-var server = app.listen(
-  port,
+const http = require("http");
+const server = http.createServer(app);
+
+server.listen(port, () =>
   console.log(`Server is running on the port no: ${port} `.green)
 );
+
+server.on("error", (err) => {
+  if (err.code === "EADDRINUSE") {
+    console.error(
+      `Port ${port} is already in use. Please stop the process using it or change PORT.`
+        .red
+    );
+    process.exit(1);
+  } else {
+    console.error("[SERVER ERROR]", err);
+    process.exit(1);
+  }
+});
+
+// Global handlers to avoid unhandled crashes
+process.on("uncaughtException", (err) => {
+  console.error("[UNCAUGHT EXCEPTION]", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("[UNHANDLED REJECTION]", reason);
+  process.exit(1);
+});
 
 // --- 4. SOCKET.IO (XỬ LÝ CHAT REALTIME) ---
 // --- THAY ĐỔI 2: Thêm maxHttpBufferSize ---
@@ -211,13 +243,23 @@ io.on("connection", (socket) => {
     onlineUsers.set(socket.id, { username, room: roomname });
     socket.join(roomname);
 
-    socket.emit("message", { userId: "admin", username: "System", text: `Welcome ${username}` });
-    socket.broadcast.to(roomname).emit("message", { userId: "admin", username: "System", text: `${username} joined` });
+    socket.emit("message", {
+      userId: "admin",
+      username: "System",
+      text: `Welcome ${username}`,
+    });
+    socket.broadcast
+      .to(roomname)
+      .emit("message", {
+        userId: "admin",
+        username: "System",
+        text: `${username} joined`,
+      });
 
     const usersInRoom = getRoomUsers(roomname);
     io.to(roomname).emit("roomUsers", {
       room: roomname,
-      users: usersInRoom 
+      users: usersInRoom,
     });
 
     socket.broadcast.to(roomname).emit("message", {
@@ -233,7 +275,7 @@ io.on("connection", (socket) => {
       io.to(user.room).emit("message", {
         userId: socket.id,
         username: user.username,
-        content: payload, 
+        content: payload,
       });
     }
   });
@@ -241,13 +283,17 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     const user = onlineUsers.get(socket.id);
     if (user) {
-      io.to(user.room).emit("message", { userId: "admin", username: "System", text: `${user.username} left` });
+      io.to(user.room).emit("message", {
+        userId: "admin",
+        username: "System",
+        text: `${user.username} left`,
+      });
       onlineUsers.delete(socket.id);
 
       const usersInRoom = getRoomUsers(user.room);
       io.to(user.room).emit("roomUsers", {
         room: user.room,
-        users: usersInRoom
+        users: usersInRoom,
       });
     }
   });
