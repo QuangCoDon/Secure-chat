@@ -26,7 +26,8 @@ function Chat({ username, roomname, socket }) {
   
   const dispatch = useDispatch();
 
-  // REF ĐỂ CUỘN
+  // STATE QUẢN LÝ ẢNH & ZOOM     
+
   const chatContainerRef = useRef(null);
   const fileInputRef = useRef(null);
 
@@ -143,7 +144,6 @@ function Chat({ username, roomname, socket }) {
         const handleSuccess = (decryptedText) => {
           dispatchProcess(false, decryptedText, formatForDisplay(data.content));
           const parsedContent = parseContent(decryptedText);
-
           if (
             parsedContent &&
             typeof parsedContent === "object" &&
@@ -487,6 +487,7 @@ function Chat({ username, roomname, socket }) {
         return (
           <div style={{ marginTop: "5px", marginBottom: "5px" }}>
             <img
+              className="chat-thumbnail"
               src={data}
               alt={name}
               style={{

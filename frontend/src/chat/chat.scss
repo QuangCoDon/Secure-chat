@@ -18,10 +18,10 @@
   box-sizing: border-box;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 
-  /* 1. HEADER: Rộng rãi, thoáng mắt */
+  /* 1. HEADER */
   .user-name {
     flex-shrink: 0;
-    padding: 15px 60px; /* Padding lớn hơn cho Desktop */
+    padding: 15px 60px;
     background-color: #1e1e1e;
     border-bottom: 1px solid #333;
     display: flex;
@@ -30,45 +30,35 @@
     box-shadow: 0 2px 4px rgba(0,0,0,0.2);
     
     .room-info {
-        h2 {
-          margin: 0;
-          color: #4ade80;
-          font-size: 1.5rem; /* Font to rõ */
-          font-weight: 600;
-        }
-        div { 
-            margin-top: 5px; 
-            font-size: 0.95rem; 
-            color: #ccc; 
-        }
+        h2 { margin: 0; color: #4ade80; font-size: 1.5rem; font-weight: 600; }
+        div { margin-top: 5px; font-size: 0.95rem; color: #ccc; }
     }
   }
 
   /* 2. KHU VỰC TIN NHẮN */
   .chat-message {
     flex: 1; 
-    width: 100%; /* Trải hết bề ngang khu vực nội dung */
+    width: 100%;
     overflow-y: auto;
-    padding: 20px 40px; /* Lề hai bên cho cảm giác thoáng trên Desktop */
+    padding: 20px 40px;
     display: flex;
     flex-direction: column; 
     gap: 12px;
     
     @include scrollbars(8px, #555, #252526);
 
-    /* --- TIN NHẮN NGƯỜI KHÁC (Căn TRÁI) --- */
     .message {
       display: flex;
       flex-direction: column;
-      align-self: flex-start; /* <--- QUAN TRỌNG: Đẩy sang TRÁI */
-      max-width: 90%;         /* Mở rộng bề ngang cho cảm giác rộng hơn trên Desktop */
-      min-width: 120px;       /* Đảm bảo tin ngắn không bị quá bé */
+      align-self: flex-start;
+      max-width: 90%;
+      min-width: 120px;
       
       p {
         background-color: #333; 
         color: #e0e0e0;
         padding: 12px 18px;
-        border-radius: 8px;   /* Bo góc nhẹ, vuông vức hơn mobile */
+        border-radius: 8px;
         margin: 0;
         font-size: 1rem;
         line-height: 1.5;
@@ -76,45 +66,54 @@
         box-shadow: 0 1px 2px rgba(0,0,0,0.1);
       }
 
-      span {
-        font-size: 0.8rem;
-        color: #888;
-        margin-top: 5px;
-        margin-left: 5px;
+      span { font-size: 0.8rem; color: #888; margin-top: 5px; margin-left: 5px; }
+
+      /* --- 4. STYLE CHO ẢNH & FILE TRONG TIN NHẮN --- */
+      .chat-thumbnail {
+        max-width: 100%;
+        max-height: 250px;
+        width: auto;
+        border-radius: 12px;
+        cursor: pointer;
+        object-fit: cover;
+        display: block;
+        transition: opacity 0.2s;
+        &:hover { opacity: 0.9; }
+      }
+
+      .file-attachment {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(0,0,0,0.2);
+        padding: 8px 12px;
+        border-radius: 6px;
+        
+        .file-icon { fontSize: 1.2rem; }
+        a { color: #4ade80; text-decoration: underline; }
       }
     }
 
-    /* --- TIN NHẮN CỦA MÌNH (Căn PHẢI) --- */
     .message.mess-right {
-      align-self: flex-end;   /* <--- QUAN TRỌNG: Đẩy sang PHẢI */
-      align-items: flex-end;  /* Căn tên người gửi sang phải */
+      align-self: flex-end;
+      align-items: flex-end;
 
       p {
         background-color: #4ade80; 
         color: #111;
         font-weight: 500;
-        text-align: left; /* Nội dung văn bản vẫn căn trái để dễ đọc */
+        text-align: left;
       }
-
-      span {
-        text-align: right;
-        margin-right: 5px;
-      }
+      span { text-align: right; margin-right: 5px; }
     }
   }
 
-  /* Tối ưu cho màn hình Desktop rộng */
   @media (min-width: 1024px) {
-    .chat-message {
-      padding: 24px 60px; /* Tăng padding hai bên một chút cho Desktop */
-      gap: 14px;
-    }
-    .chat-message .message {
-      max-width: 88%; /* Vẫn rộng nhưng cân đối để dễ đọc */
-    }
+    .chat-message { padding: 24px 60px; gap: 14px; }
+    .chat-message .message { max-width: 88%; }
   }
 
-  /* 3. KHU VỰC NHẬP LIỆU: Phong cách Desktop */
+  /* 3. KHU VỰC NHẬP LIỆU */
   .send {
     flex-shrink: 0;
     padding: 20px 30px;
@@ -125,63 +124,97 @@
     align-items: center;
 
     input {
-      flex: 1;
-      padding: 14px 20px; /* Ô nhập cao hơn */
-      border-radius: 6px;
-      border: 1px solid #444;
-      background-color: #2d2d2d;
-      color: white;
-      outline: none;
-      font-size: 1rem;
-      transition: all 0.2s;
-
-      &:focus {
-        border-color: #4ade80;
-        background-color: #333;
-        box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.1);
-      }
+      flex: 1; padding: 14px 20px; border-radius: 6px; border: 1px solid #444;
+      background-color: #2d2d2d; color: white; outline: none; font-size: 1rem; transition: all 0.2s;
+      &:focus { border-color: #4ade80; background-color: #333; box-shadow: 0 0 0 2px rgba(74, 222, 128, 0.1); }
     }
 
     button {
-      padding: 0 35px; /* Nút bấm rộng hơn */
-      height: 48px;    /* Chiều cao bằng ô input */
-      background-color: #4ade80;
-      color: #000;
-      border: none;
-      border-radius: 6px;
-      font-weight: bold;
-      cursor: pointer;
-      font-size: 0.95rem;
-      letter-spacing: 0.5px;
-      transition: background 0.2s;
-      
-      &:hover {
-        background-color: #22c55e;
-      }
+      padding: 0 35px; height: 48px; background-color: #4ade80; color: #000;
+      border: none; border-radius: 6px; font-weight: bold; cursor: pointer;
+      font-size: 0.95rem; letter-spacing: 0.5px; transition: background 0.2s;
+      &:hover { background-color: #22c55e; }
     }
   }
 }
 
-/* Class này sẽ ghi đè style của nút button ở trên */
-    .btn-attach-file {
-      padding: 0;           /* Reset padding */
-      margin-right: 5px;
-      width: 40px;
-      height: 40px;
-      min-width: 40px;      /* Cố định chiều ngang */
-      border-radius: 50%;   /* Hình tròn */
-      background-color: #333 !important; /* Dùng !important để chắc chắn ăn màu xám */
-      color: #ccc !important;            /* Icon màu sáng */
-      
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      transition: all 0.2s ease-in-out;
+/* Nút đính kèm file */
+.btn-attach-file {
+  padding: 0; margin-right: 5px; width: 40px; height: 40px; min-width: 40px;
+  border-radius: 50%; background-color: #333 !important; color: #ccc !important;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.2s ease-in-out;
+  border: none; cursor: pointer;
 
-      /* Khi di chuột vào nút đính kèm */
-      &:hover {
-        background-color: #444 !important;
-        color: #4ade80 !important; /* Icon chuyển xanh */
-        transform: scale(1.1);
-      }
+  &:hover {
+    background-color: #444 !important; color: #4ade80 !important; transform: scale(1.1);
+  }
+}
+
+/* 5. LIGHTBOX / MODAL ZOOM (Full Screen Image) */
+.lightbox-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  background-color: rgba(0, 0, 0, 0.9);
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  backdrop-filter: blur(5px);
+  overflow: hidden;
+
+  /* Nút đóng */
+  .lightbox-close {
+    position: absolute; top: 20px; right: 30px;
+    color: white; font-size: 24px; cursor: pointer;
+    background: rgba(255,255,255,0.2);
+    width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 100001;
+    transition: background 0.2s;
+    &:hover { background: rgba(255,255,255,0.4); }
+  }
+
+  /* Vùng chứa ảnh có thể cuộn */
+  .lightbox-content {
+    flex: 1; width: 100%;
+    display: flex; justify-content: center; align-items: center;
+    overflow: auto; padding: 20px;
+
+    .lightbox-image {
+      max-width: 90%; max-height: 90%;
+      border-radius: 4px;
+      transition: transform 0.1s ease-out; /* Mượt mà khi zoom */
+      box-shadow: 0 0 20px rgba(0,0,0,0.5);
     }
+  }
+
+  /* Thanh công cụ Zoom */
+  .zoom-controls {
+    position: absolute; bottom: 30px;
+    display: flex; gap: 20px;
+    background: rgba(0,0,0,0.6);
+    padding: 10px 20px;
+    border-radius: 30px;
+    z-index: 100001;
+
+    .zoom-text {
+      color: white; min-width: 40px; text-align: center; line-height: 30px;
+      font-weight: bold; user-select: none;
+    }
+
+    .zoom-btn {
+      background: rgba(255,255,255,0.2);
+      border: none; color: white;
+      width: 30px; height: 30px;
+      border-radius: 50%; cursor: pointer;
+      font-size: 18px;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s;
+      
+      &:hover { background: rgba(255,255,255,0.4); }
+      &:active { transform: scale(0.95); }
+    }
+  }
+}
